@@ -20,7 +20,7 @@
   .out{font-size:12px;color:#999;background:none;border:none;cursor:pointer;text-decoration:underline;font-family:inherit}
   .body{padding:1.25rem 1rem 3rem}.wrap{max-width:820px;margin:0 auto}
   .card{background:#fff;border-radius:12px;border:1px solid #e5e5e5;padding:1.15rem;margin-bottom:1rem}
-  .ct{font-size:14px;font-weight:600;margin-bottom:.85rem}
+  .ct{font-size:18px;font-weight:700;margin-bottom:1rem;color:#1a1a1a;padding-left:11px;border-left:4px solid #185FA5}
   label{display:block;font-size:12px;font-weight:600;color:#666;margin-bottom:5px}
   .f{margin-bottom:12px}
   input,select,textarea{width:100%;font-size:15px;padding:10px 12px;border-radius:9px;border:1px solid #ddd;outline:none;font-family:inherit;background:#fff}
@@ -52,7 +52,7 @@
   .dates{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
   .dp{padding:7px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:12.5px;cursor:pointer;font-family:inherit}
   .dp.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
-  .dates input[type=date]{font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid #ddd;font-family:inherit}
+  .dates input[type=date]{font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid #ddd;font-family:inherit;width:auto;min-width:130px}
   .topseller{display:inline-block;background:#FEF3E2;color:#B45309;font-size:10px;font-weight:700;border-radius:20px;padding:1px 8px;margin-left:6px;vertical-align:middle}
   .batchrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
   .batchrow:last-child{border-bottom:none}
@@ -96,11 +96,9 @@
           <button class="tb" data-t="new_stock"        onclick="pickType('new_stock',this)">➕ New Stock</button>
         </div>
       </div>
-      <div class="row2">
-        <div class="f"><label>Date</label><input type="date" id="date"></div>
-        <div class="f"><label>Quantity</label><input type="number" id="qty" min="1" step="1" placeholder="0"></div>
-      </div>
+      <div class="f"><label>Date</label><input type="date" id="date"></div>
       <div class="f"><label>Product</label><select id="product"><option value="">Select product…</option></select></div>
+      <div class="f"><label>Quantity</label><input type="number" id="qty" min="1" step="1" placeholder="0"></div>
       <div class="f" id="refWrap" style="display:none"><label>Order reference number <span style="color:#A32D2D">*</span></label>
         <input id="orderRef" placeholder="e.g. 14391"><div class="muted" style="margin-top:4px">Required for returns.</div></div>
       <div class="f"><label>Note (optional)</label><input id="note" placeholder="Anything worth recording"></div>

@@ -45,7 +45,7 @@
   .num{text-align:right;font-family:'SF Mono',Menlo,monospace}
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:600;color:#fff;white-space:nowrap}
   .p-dispatched{background:#185FA5}.p-returned{background:#1F7A3B}
-  .p-returned_damaged{background:#A32D2D}.p-new_stock{background:#7C3AED}.p-adjustment{background:#B45309}
+  .p-returned_damaged{background:#A32D2D}.p-new_stock{background:#7C3AED}.p-new_stock_damaged{background:#B91C7C}.p-adjustment{background:#B45309}
   .low{color:#A32D2D;font-weight:700}
   .muted{color:#999;font-size:12px}
   .scroll{overflow-x:auto}
@@ -99,6 +99,11 @@
       <div class="f"><label>Date</label><input type="date" id="date"></div>
       <div class="f"><label>Product</label><select id="product"><option value="">Select product…</option></select></div>
       <div class="f"><label>Quantity</label><input type="number" id="qty" min="1" step="1" placeholder="0"></div>
+      <div class="f" id="damagedWrap" style="display:none">
+        <label>Damaged in this shipment (optional)</label>
+        <input type="number" id="damagedQty" min="0" step="1" placeholder="0">
+        <div class="muted" style="margin-top:4px">If some arrived damaged, enter how many here — they'll be split into the damaged pool automatically. Leave blank if none.</div>
+      </div>
       <div class="f" id="refWrap" style="display:none"><label>Order reference number <span style="color:#A32D2D">*</span></label>
         <input id="orderRef" placeholder="e.g. 14391"><div class="muted" style="margin-top:4px">Required for returns.</div></div>
       <div class="f"><label>Note (optional)</label><input id="note" placeholder="Anything worth recording"></div>
@@ -149,7 +154,7 @@ const SECRET = 'Labila49!';               // must match API_SECRET in Vercel
 const PROXY  = 'https://shopify-order-proxy.vercel.app';
 const AUTH   = 'maarg_inv_partner_auth';
 const LOW_STOCK = 10;
-const TYPE_LABEL = {dispatched:'Dispatched',returned:'Returned',returned_damaged:'Damaged',new_stock:'New Stock',adjustment:'Adjustment'};
+const TYPE_LABEL = {dispatched:'Dispatched',returned:'Returned',returned_damaged:'Damaged',new_stock:'New Stock',new_stock_damaged:'New Stock (Damaged)',adjustment:'Adjustment'};
 
 let DATA=null, TYPE=null, BATCH=[];
 
@@ -172,6 +177,7 @@ function pickType(t,el){
   document.querySelectorAll('.tb').forEach(b=>b.classList.remove('on'));
   el.classList.add('on');
   document.getElementById('refWrap').style.display = (t==='returned'||t==='returned_damaged') ? 'block' : 'none';
+  document.getElementById('damagedWrap').style.display = (t==='new_stock') ? 'block' : 'none';
 }
 
 async function api(body){
@@ -201,7 +207,7 @@ function computeStock(){
     if(!(e.product in s)){ s[e.product]=0; d[e.product]=0; }
     if(e.type==='dispatched') s[e.product]-=e.qty;
     else if(e.type==='returned'||e.type==='new_stock') s[e.product]+=e.qty;
-    else if(e.type==='returned_damaged') d[e.product]+=e.qty;
+    else if(e.type==='returned_damaged'||e.type==='new_stock_damaged') d[e.product]+=e.qty;
     else if(e.type==='adjustment') s[e.product]+=e.qty;
   });
   return {stock:s, damaged:d};
@@ -214,19 +220,34 @@ function addToBatch(){
   const product = document.getElementById('product').value;
   const qty = Number(document.getElementById('qty').value);
   const orderRef = document.getElementById('orderRef').value.trim();
+  const note = document.getElementById('note').value.trim();
+  const date = document.getElementById('date').value;
   if(!product) return msg.innerHTML = err('Choose a product.');
   if(!(qty>0)) return msg.innerHTML = err('Enter a quantity.');
   if((TYPE==='returned'||TYPE==='returned_damaged') && !orderRef) return msg.innerHTML = err('Order reference is required for returns.');
 
-  BATCH.push({
-    date: document.getElementById('date').value, type: TYPE, product, qty,
-    orderRef: orderRef || null, note: document.getElementById('note').value.trim(),
-  });
+  // New Stock with a damaged sub-count splits into two linked entries — the
+  // sellable portion (qty - damaged) as new_stock, and the damaged portion
+  // as its own new_stock_damaged entry. Doing this as one calculation (not
+  // two entries the partner has to remember to sum correctly) means the
+  // numbers can't accidentally double-count.
+  const damagedQty = TYPE==='new_stock' ? Number(document.getElementById('damagedQty').value || 0) : 0;
+  if(damagedQty > 0){
+    if(damagedQty > qty) return msg.innerHTML = err('Damaged quantity cannot exceed the total received.');
+    const sellable = qty - damagedQty;
+    if(sellable > 0) BATCH.push({date, type:'new_stock', product, qty:sellable, orderRef:null, note});
+    BATCH.push({date, type:'new_stock_damaged', product, qty:damagedQty, orderRef:null,
+      note: note ? note+' (damaged on arrival)' : 'Damaged on arrival'});
+  } else {
+    BATCH.push({date, type:TYPE, product, qty, orderRef: orderRef || null, note});
+  }
+
   // Reset product + qty + ref + note so the next item starts fresh — this is
   // what makes it obvious you can add a DIFFERENT product next, not just
   // more of the same one. Type and date stay selected since those are
   // usually the same across several items in one visit.
   document.getElementById('product').value='';
+  document.getElementById('damagedQty').value='';
   document.getElementById('qty').value=''; document.getElementById('orderRef').value=''; document.getElementById('note').value='';
   document.getElementById('product').focus();
   msg.innerHTML = '<span style="color:#1F7A3B">✓ Added — pick your next product below, or Review & Submit when done.</span>';

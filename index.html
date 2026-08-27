@@ -98,7 +98,7 @@
       </div>
       <div class="f"><label>Date</label><input type="date" id="date"></div>
       <div class="f"><label>Product</label><select id="product"><option value="">Select product…</option></select></div>
-      <div class="f"><label>Quantity</label><input type="number" id="qty" min="1" step="1" placeholder="0"></div>
+      <div class="f"><label id="qtyLabel">Quantity</label><input type="number" id="qty" min="1" step="1" placeholder="0"></div>
       <div class="f" id="damagedWrap" style="display:none">
         <label>Damaged in this shipment (optional)</label>
         <input type="number" id="damagedQty" min="0" step="1" placeholder="0">
@@ -149,7 +149,7 @@
 </div>
 
 <script>
-const APP_PASSWORD = 'Upaya26!';   // ← CHANGE before sharing with the partner
+const APP_PASSWORD = 'MaargStock2026!';   // ← CHANGE before sharing with the partner
 const SECRET = 'Labila49!';               // must match API_SECRET in Vercel
 const PROXY  = 'https://shopify-order-proxy.vercel.app';
 const AUTH   = 'maarg_inv_partner_auth';
@@ -178,6 +178,7 @@ function pickType(t,el){
   el.classList.add('on');
   document.getElementById('refWrap').style.display = (t==='returned'||t==='returned_damaged') ? 'block' : 'none';
   document.getElementById('damagedWrap').style.display = (t==='new_stock') ? 'block' : 'none';
+  document.getElementById('qtyLabel').textContent = (t==='new_stock') ? 'Total Quantity (Including Damaged Ones)' : 'Quantity';
 }
 
 async function api(body){
@@ -364,12 +365,85 @@ function renderHistory(){
         <span class="r">${items.length} item${items.length>1?'s':''} · ${summary} <span id="arw${idx}">▸</span></span>
       </div>
       <div class="dcontent" id="dc${idx}">
-        ${items.map(e=>`<div class="batchrow">
-          <span><span class="pill p-${e.type}">${TYPE_LABEL[e.type]}</span> ${e.qty} × ${e.product}${e.orderRef?' · #'+e.orderRef:''}${e.note?' · '+e.note:''}</span>
-          <span class="muted">${e.by}</span>
-        </div>`).join('')}
+        ${items.map((e,j)=>{
+          const rowId = `${idx}_${j}`;
+          const needsRef = e.type==='returned'||e.type==='returned_damaged';
+          const myName = document.getElementById('by').value.trim();
+          return `<div class="batchrow" style="display:block">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <span><span class="pill p-${e.type}">${TYPE_LABEL[e.type]}</span> ${e.qty} × ${e.product}${e.orderRef?' · #'+e.orderRef:''}${e.note?' · '+e.note:''}
+                <span class="muted">— ${e.by}</span></span>
+              <span style="white-space:nowrap;flex-shrink:0">
+                <button class="btn2" onclick="toggleHistEdit('${rowId}')">Edit</button>
+                <button class="btn2" style="color:#A32D2D" onclick="toggleHistVoid('${rowId}')">Delete</button>
+              </span>
+            </div>
+            <div id="hedit_${rowId}" style="display:none;margin-top:8px;padding:10px;background:#f5f5f5;border-radius:8px">
+              <div class="f" style="margin-bottom:8px"><label>Quantity</label><input type="number" id="hqty_${rowId}" value="${e.qty}"></div>
+              ${needsRef?`<div class="f" style="margin-bottom:8px"><label>Order reference</label><input type="text" id="href_${rowId}" value="${e.orderRef||''}"></div>`:''}
+              <div class="f" style="margin-bottom:8px"><label>Note</label><input type="text" id="hnote_${rowId}" value="${(e.note||'').replace(/"/g,'&quot;')}"></div>
+              <div class="f" style="margin-bottom:8px"><label>Your name</label><input type="text" id="hby_${rowId}" value="${myName}"></div>
+              <div style="display:flex;gap:8px">
+                <button class="btn2" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="saveHistEdit('${rowId}','${e.id}','${e.date}','${e.type}','${e.product.replace(/'/g,"\\'")}')">Save</button>
+                <button class="btn2" onclick="toggleHistEdit('${rowId}')">Cancel</button>
+              </div>
+              <div class="muted" id="hemsg_${rowId}" style="margin-top:6px"></div>
+            </div>
+            <div id="hvoid_${rowId}" style="display:none;margin-top:8px;padding:10px;background:#fdf2f2;border-radius:8px">
+              <div class="f" style="margin-bottom:8px"><label>Why is this being removed?</label><input type="text" id="hreason_${rowId}"></div>
+              <div class="f" style="margin-bottom:8px"><label>Your name</label><input type="text" id="hvby_${rowId}" value="${myName}"></div>
+              <div style="display:flex;gap:8px">
+                <button class="btn2" style="background:#A32D2D;color:#fff;border-color:#A32D2D" onclick="saveHistVoid('${rowId}','${e.id}')">Confirm Delete</button>
+                <button class="btn2" onclick="toggleHistVoid('${rowId}')">Cancel</button>
+              </div>
+              <div class="muted" id="hvmsg_${rowId}" style="margin-top:6px"></div>
+            </div>
+          </div>`;
+        }).join('')}
       </div>`;
   }).join('') : '<div class="muted" style="padding:14px 0">No entries yet.</div>';
+}
+
+// Vendors can correct their own mistakes here, inline — no popups. Nothing
+// is silently changed: edits create a new revision (the original is kept,
+// marked superseded) and deletes mark the entry void with a reason. Both
+// are stamped with whoever made the change, and both immediately recompute
+// stock since only active entries count toward it.
+function toggleHistEdit(rowId){
+  document.querySelectorAll('[id^="hedit_"],[id^="hvoid_"]').forEach(el=>el.style.display='none');
+  const el = document.getElementById('hedit_'+rowId);
+  el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+function toggleHistVoid(rowId){
+  document.querySelectorAll('[id^="hedit_"],[id^="hvoid_"]').forEach(el=>el.style.display='none');
+  const el = document.getElementById('hvoid_'+rowId);
+  el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+async function saveHistEdit(rowId, id, date, type, product){
+  const qty = Number(document.getElementById('hqty_'+rowId).value);
+  const refEl = document.getElementById('href_'+rowId);
+  const orderRef = refEl ? refEl.value.trim() : null;
+  const note = document.getElementById('hnote_'+rowId).value.trim();
+  const by = document.getElementById('hby_'+rowId).value.trim();
+  const msg = document.getElementById('hemsg_'+rowId);
+  if(!(qty>0)) return msg.innerHTML = err('Enter a valid quantity.');
+  if((type==='returned'||type==='returned_damaged') && !orderRef) return msg.innerHTML = err('Order reference is required for returns.');
+  if(!by) return msg.innerHTML = err('Enter your name.');
+  try{
+    const r = await api({action:'edit', id, by, date, type, product, qty, orderRef, note});
+    DATA=r.data; localStorage.setItem('maarg_inv_name', by); render();
+  }catch(e){ msg.innerHTML = err(e.message); }
+}
+async function saveHistVoid(rowId, id){
+  const reason = document.getElementById('hreason_'+rowId).value.trim();
+  const by = document.getElementById('hvby_'+rowId).value.trim();
+  const msg = document.getElementById('hvmsg_'+rowId);
+  if(!reason) return msg.innerHTML = err('A reason is required.');
+  if(!by) return msg.innerHTML = err('Enter your name.');
+  try{
+    const r = await api({action:'void', id, by, reason});
+    DATA=r.data; localStorage.setItem('maarg_inv_name', by); render();
+  }catch(e){ msg.innerHTML = err(e.message); }
 }
 function toggleDay(i){
   const c = document.getElementById('dc'+i); const a = document.getElementById('arw'+i);

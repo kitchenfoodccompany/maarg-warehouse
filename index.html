@@ -49,6 +49,11 @@
   .low{color:#A32D2D;font-weight:700}
   .muted{color:#999;font-size:12px}
   .scroll{overflow-x:auto}
+  .dates{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+  .dp{padding:7px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .dp.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+  .dates input[type=date]{font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid #ddd;font-family:inherit}
+  .topseller{display:inline-block;background:#FEF3E2;color:#B45309;font-size:10px;font-weight:700;border-radius:20px;padding:1px 8px;margin-left:6px;vertical-align:middle}
   .batchrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
   .batchrow:last-child{border-bottom:none}
   .rm{background:none;border:none;color:#A32D2D;font-size:16px;cursor:pointer;padding:0 6px}
@@ -124,7 +129,16 @@
     </div>
 
     <div class="card">
-      <div class="ct">My recent entries <span class="muted">(grouped by day)</span></div>
+      <div class="ct">Recent Entries</div>
+      <div class="dates">
+        <button class="dp" onclick="setHistRange('today',this)">Today</button>
+        <button class="dp" onclick="setHistRange('yesterday',this)">Yesterday</button>
+        <button class="dp on" onclick="setHistRange('7',this)">7 days</button>
+        <button class="dp" onclick="setHistRange('30',this)">30 days</button>
+        <button class="dp" onclick="setHistRange('all',this)">All time</button>
+        <input type="date" id="hf" onchange="setHistRange('custom')"><span class="muted">to</span>
+        <input type="date" id="ht" onchange="setHistRange('custom')">
+      </div>
       <div id="hist"></div>
     </div>
 
@@ -132,7 +146,7 @@
 </div>
 
 <script>
-const APP_PASSWORD = 'Upaya26!';   // ← CHANGE before sharing with the partner
+const APP_PASSWORD = 'MaargStock2026!';   // ← CHANGE before sharing with the partner
 const SECRET = 'Labila49!';               // must match API_SECRET in Vercel
 const PROXY  = 'https://shopify-order-proxy.vercel.app';
 const AUTH   = 'maarg_inv_partner_auth';
@@ -210,8 +224,14 @@ function addToBatch(){
     date: document.getElementById('date').value, type: TYPE, product, qty,
     orderRef: orderRef || null, note: document.getElementById('note').value.trim(),
   });
+  // Reset product + qty + ref + note so the next item starts fresh — this is
+  // what makes it obvious you can add a DIFFERENT product next, not just
+  // more of the same one. Type and date stay selected since those are
+  // usually the same across several items in one visit.
+  document.getElementById('product').value='';
   document.getElementById('qty').value=''; document.getElementById('orderRef').value=''; document.getElementById('note').value='';
-  msg.innerHTML = '';
+  document.getElementById('product').focus();
+  msg.innerHTML = '<span style="color:#1F7A3B">✓ Added — pick your next product below, or Review & Submit when done.</span>';
   renderBatch();
 }
 function err(m){ return `<span style="color:#A32D2D">${m}</span>`; }
@@ -267,25 +287,49 @@ async function submitBatch(){
   btn.disabled=false; btn.textContent='✓ Confirm & Save All';
 }
 
-// ── Stock table ──
+// ── Stock table (with top-seller highlight) ──
+function topSeller(){
+  const totals = {};
+  active().filter(e=>e.type==='dispatched').forEach(e=>{ totals[e.product]=(totals[e.product]||0)+e.qty; });
+  let best=null, max=0;
+  for(const [p,q] of Object.entries(totals)) if(q>max){ max=q; best=p; }
+  return best;
+}
 function render(){
   const {stock,damaged} = computeStock();
+  const top = topSeller();
   document.getElementById('stock').innerHTML =
     `<tr><th>Product</th><th class="num">In warehouse</th><th class="num">Damaged</th></tr>` +
     DATA.products.map(p=>{
       const st=stock[p]||0, dm=damaged[p]||0;
-      return `<tr><td>${p}</td><td class="num ${st<=LOW_STOCK?'low':''}">${st.toLocaleString()}</td>
+      return `<tr><td>${p}${p===top?' <span class="topseller">🔥 Top seller</span>':''}</td>
+        <td class="num ${st<=LOW_STOCK?'low':''}">${st.toLocaleString()}</td>
         <td class="num" style="color:${dm?'#A32D2D':'#ccc'}">${dm||'—'}</td></tr>`;
     }).join('');
   renderHistory();
 }
 
-// ── Grouped-by-day history, expandable ──
+// ── Grouped-by-day history, date-range filterable, shows ALL vendor
+// entries (not just whoever is currently typed into "Your name") ──
+let HISTFROM=null, HISTTO=null;
+function setHistRange(k,el){
+  const iso=d=>d.toISOString().slice(0,10), now=new Date(), t=iso(now);
+  if(k==='today'){HISTFROM=t;HISTTO=t;}
+  else if(k==='yesterday'){const y=new Date(now);y.setDate(y.getDate()-1);HISTFROM=HISTTO=iso(y);}
+  else if(k==='7'||k==='30'){const s=new Date(now);s.setDate(s.getDate()-(+k-1));HISTFROM=iso(s);HISTTO=t;}
+  else if(k==='all'){HISTFROM=null;HISTTO=null;}
+  else {HISTFROM=document.getElementById('hf').value||null;HISTTO=document.getElementById('ht').value||null;}
+  if(el){document.querySelectorAll('#app .dp').forEach(b=>b.classList.remove('on'));el.classList.add('on');}
+  renderHistory();
+}
+// Default view: last 7 days, so the page stays short — older entries are
+// one tap away via the date buttons above, not scrolled past.
+{ const now=new Date(), s=new Date(now); s.setDate(s.getDate()-6);
+  HISTFROM=s.toISOString().slice(0,10); HISTTO=now.toISOString().slice(0,10); }
+
 function renderHistory(){
-  const by = document.getElementById('by').value.trim().toLowerCase();
-  let ev = active().filter(e => !by || (e.by||'').toLowerCase()===by);
+  let ev = active().filter(e => (!HISTFROM||e.date>=HISTFROM) && (!HISTTO||e.date<=HISTTO));
   ev.sort((a,b)=>(b.date+b.at).localeCompare(a.date+a.at));
-  ev = ev.slice(0,300);
 
   const byDay = {};
   ev.forEach(e => (byDay[e.date] = byDay[e.date]||[]).push(e));

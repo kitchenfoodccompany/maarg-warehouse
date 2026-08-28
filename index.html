@@ -50,6 +50,12 @@
   .muted{color:#999;font-size:12px}
   .scroll{overflow-x:auto}
   canvas{display:block;width:100%}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1rem}
+  .kpi{background:#fff;border:1px solid #e5e5e5;border-radius:11px;padding:13px}
+  .kl{font-size:10.5px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px}
+  .kv{font-size:20px;font-weight:700;font-family:'SF Mono',Menlo,monospace;margin-top:5px}
+  .k-d{color:#185FA5}.k-r{color:#1F7A3B}.k-x{color:#A32D2D}.k-n{color:#7C3AED}.k-a{color:#B45309}
+  @media(max-width:640px){.kpis{grid-template-columns:1fr 1fr}}
   .dates{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
   .dp{padding:7px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:12.5px;cursor:pointer;font-family:inherit}
   .dp.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
@@ -127,6 +133,23 @@
       <div class="msg" id="submitmsg"></div>
     </div>
 
+    <div class="dates" style="margin-top:0">
+      <button class="dp" onclick="setHistRange('today',this)">Today</button>
+      <button class="dp" onclick="setHistRange('yesterday',this)">Yesterday</button>
+      <button class="dp on" onclick="setHistRange('7',this)">7 days</button>
+      <button class="dp" onclick="setHistRange('30',this)">30 days</button>
+      <button class="dp" onclick="setHistRange('all',this)">All time</button>
+      <input type="date" id="hf" onchange="setHistRange('custom')"><span class="muted">to</span>
+      <input type="date" id="ht" onchange="setHistRange('custom')">
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="kl">Dispatched</div><div class="kv k-d" id="k-d">—</div></div>
+      <div class="kpi"><div class="kl">Returned</div><div class="kv k-r" id="k-r">—</div></div>
+      <div class="kpi"><div class="kl">Damaged</div><div class="kv k-x" id="k-x">—</div></div>
+      <div class="kpi"><div class="kl">New Stock</div><div class="kv k-n" id="k-n">—</div></div>
+      <div class="kpi"><div class="kl">Adjustments</div><div class="kv k-a" id="k-a">—</div></div>
+    </div>
+
     <div class="card">
       <div class="ct" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <span>Trend over time</span>
@@ -148,15 +171,6 @@
 
     <div class="card">
       <div class="ct">Recent Entries</div>
-      <div class="dates">
-        <button class="dp" onclick="setHistRange('today',this)">Today</button>
-        <button class="dp" onclick="setHistRange('yesterday',this)">Yesterday</button>
-        <button class="dp on" onclick="setHistRange('7',this)">7 days</button>
-        <button class="dp" onclick="setHistRange('30',this)">30 days</button>
-        <button class="dp" onclick="setHistRange('all',this)">All time</button>
-        <input type="date" id="hf" onchange="setHistRange('custom')"><span class="muted">to</span>
-        <input type="date" id="ht" onchange="setHistRange('custom')">
-      </div>
       <div id="hist"></div>
     </div>
 
@@ -324,6 +338,17 @@ async function submitBatch(){
 }
 
 // ── Stock table (with top-seller highlight) ──
+function renderKPIs(){
+  const t={dispatched:0,returned:0,returned_damaged:0,new_stock:0,adjustment:0};
+  active().filter(e => (!HISTFROM||e.date>=HISTFROM) && (!HISTTO||e.date<=HISTTO))
+    .forEach(e=>{ t[e.type]=(t[e.type]||0)+e.qty; });
+  document.getElementById('k-d').textContent=t.dispatched.toLocaleString();
+  document.getElementById('k-r').textContent=t.returned.toLocaleString();
+  document.getElementById('k-x').textContent=t.returned_damaged.toLocaleString();
+  document.getElementById('k-n').textContent=t.new_stock.toLocaleString();
+  document.getElementById('k-a').textContent=(t.adjustment>=0?'+':'')+t.adjustment.toLocaleString();
+}
+
 function topSeller(){
   const totals = {};
   active().filter(e=>e.type==='dispatched').forEach(e=>{ totals[e.product]=(totals[e.product]||0)+e.qty; });
@@ -401,6 +426,7 @@ function render(){
         <td class="num" style="color:${dm?'#A32D2D':'#ccc'}">${dm||'—'}</td></tr>`;
     }).join('');
   renderHistory();
+  renderKPIs();
   drawChart();
 }
 
@@ -416,6 +442,7 @@ function setHistRange(k,el){
   else {HISTFROM=document.getElementById('hf').value||null;HISTTO=document.getElementById('ht').value||null;}
   if(el){document.querySelectorAll('#app .dp').forEach(b=>b.classList.remove('on'));el.classList.add('on');}
   renderHistory();
+  renderKPIs();
   drawChart();
 }
 // Default view: last 7 days, so the page stays short — older entries are

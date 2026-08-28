@@ -133,7 +133,7 @@
       <div class="msg" id="submitmsg"></div>
     </div>
 
-    <div class="dates" style="margin-top:0">
+    <div class="dates" id="kpiDates" style="margin-top:0">
       <button class="dp" onclick="setHistRange('today',this)">Today</button>
       <button class="dp" onclick="setHistRange('yesterday',this)">Yesterday</button>
       <button class="dp on" onclick="setHistRange('7',this)">7 days</button>
@@ -171,6 +171,15 @@
 
     <div class="card">
       <div class="ct">Recent Entries</div>
+      <div class="dates" id="recentDates">
+        <button class="dp" onclick="setRecentRange('today',this)">Today</button>
+        <button class="dp" onclick="setRecentRange('yesterday',this)">Yesterday</button>
+        <button class="dp on" onclick="setRecentRange('7',this)">7 days</button>
+        <button class="dp" onclick="setRecentRange('30',this)">30 days</button>
+        <button class="dp" onclick="setRecentRange('all',this)">All time</button>
+        <input type="date" id="rf" onchange="setRecentRange('custom')"><span class="muted">to</span>
+        <input type="date" id="rt" onchange="setRecentRange('custom')">
+      </div>
       <div id="hist"></div>
     </div>
 
@@ -430,8 +439,7 @@ function render(){
   drawChart();
 }
 
-// ── Grouped-by-day history, date-range filterable, shows ALL vendor
-// entries (not just whoever is currently typed into "Your name") ──
+// ── Date range for KPIs + Chart (top of page) ──
 let HISTFROM=null, HISTTO=null;
 function setHistRange(k,el){
   const iso=d=>d.toISOString().slice(0,10), now=new Date(), t=iso(now);
@@ -440,18 +448,35 @@ function setHistRange(k,el){
   else if(k==='7'||k==='30'){const s=new Date(now);s.setDate(s.getDate()-(+k-1));HISTFROM=iso(s);HISTTO=t;}
   else if(k==='all'){HISTFROM=null;HISTTO=null;}
   else {HISTFROM=document.getElementById('hf').value||null;HISTTO=document.getElementById('ht').value||null;}
-  if(el){document.querySelectorAll('#app .dp').forEach(b=>b.classList.remove('on'));el.classList.add('on');}
-  renderHistory();
+  if(el){document.querySelectorAll('#kpiDates .dp').forEach(b=>b.classList.remove('on'));el.classList.add('on');}
   renderKPIs();
   drawChart();
 }
-// Default view: last 7 days, so the page stays short — older entries are
-// one tap away via the date buttons above, not scrolled past.
 { const now=new Date(), s=new Date(now); s.setDate(s.getDate()-6);
   HISTFROM=s.toISOString().slice(0,10); HISTTO=now.toISOString().slice(0,10); }
 
+// ── Independent date range for Recent Entries specifically — matches
+// admin's Dashboard, which also has two SEPARATE date controls (one for
+// KPIs+Chart, a second one directly above the log/history list) rather
+// than one shared control driving everything. Defaults to last 7 days on
+// both mobile and desktop — no separate behaviour per screen size, so the
+// short-by-default view is consistent everywhere.
+let RECFROM=null, RECTO=null;
+function setRecentRange(k,el){
+  const iso=d=>d.toISOString().slice(0,10), now=new Date(), t=iso(now);
+  if(k==='today'){RECFROM=t;RECTO=t;}
+  else if(k==='yesterday'){const y=new Date(now);y.setDate(y.getDate()-1);RECFROM=RECTO=iso(y);}
+  else if(k==='7'||k==='30'){const s=new Date(now);s.setDate(s.getDate()-(+k-1));RECFROM=iso(s);RECTO=t;}
+  else if(k==='all'){RECFROM=null;RECTO=null;}
+  else {RECFROM=document.getElementById('rf').value||null;RECTO=document.getElementById('rt').value||null;}
+  if(el){document.querySelectorAll('#recentDates .dp').forEach(b=>b.classList.remove('on'));el.classList.add('on');}
+  renderHistory();
+}
+{ const now=new Date(), s=new Date(now); s.setDate(s.getDate()-6);
+  RECFROM=s.toISOString().slice(0,10); RECTO=now.toISOString().slice(0,10); }
+
 function renderHistory(){
-  let ev = active().filter(e => (!HISTFROM||e.date>=HISTFROM) && (!HISTTO||e.date<=HISTTO));
+  let ev = active().filter(e => (!RECFROM||e.date>=RECFROM) && (!RECTO||e.date<=RECTO));
   ev.sort((a,b)=>(b.date+b.at).localeCompare(a.date+a.at));
 
   const byDay = {};

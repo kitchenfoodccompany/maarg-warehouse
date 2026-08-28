@@ -127,6 +127,20 @@
     </div>
 
     <div class="card">
+      <div class="ct" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <span>Trend over time</span>
+        <select id="chartType" onchange="drawChart()" style="font-size:13px;padding:6px 8px;width:auto">
+          <option value="dispatched">Dispatched</option>
+          <option value="returned">Returned</option>
+          <option value="returned_damaged">Returned Damaged</option>
+          <option value="new_stock">New Stock</option>
+          <option value="new_stock_damaged">New Stock (Damaged)</option>
+        </select>
+      </div>
+      <div style="position:relative"><canvas id="chart" height="220"></canvas><div id="chartTip" style="display:none;position:absolute;background:#1a1a1a;color:#fff;font-size:11.5px;padding:4px 8px;border-radius:6px;pointer-events:none;white-space:nowrap;z-index:5"></div></div>
+    </div>
+
+    <div class="card">
       <div class="ct">Current stock</div>
       <div class="scroll"><table id="stock"></table></div>
     </div>
@@ -149,7 +163,7 @@
 </div>
 
 <script>
-const APP_PASSWORD = 'Upaya26!';   // ← CHANGE before sharing with the partner
+const APP_PASSWORD = 'MaargStock2026!';   // ← CHANGE before sharing with the partner
 const SECRET = 'Labila49!';               // must match API_SECRET in Vercel
 const PROXY  = 'https://shopify-order-proxy.vercel.app';
 const AUTH   = 'maarg_inv_partner_auth';
@@ -210,6 +224,7 @@ function computeStock(){
     else if(e.type==='returned'||e.type==='new_stock') s[e.product]+=e.qty;
     else if(e.type==='returned_damaged'||e.type==='new_stock_damaged') d[e.product]+=e.qty;
     else if(e.type==='adjustment') s[e.product]+=e.qty;
+    else if(e.type==='adjustment_damaged') d[e.product]+=e.qty;
   });
   return {stock:s, damaged:d};
 }
@@ -315,6 +330,64 @@ function topSeller(){
   for(const [p,q] of Object.entries(totals)) if(q>max){ max=q; best=p; }
   return best;
 }
+
+// ── Trend chart — same time window as Recent Entries (HISTFROM/HISTTO),
+// selectable by entry type, with a hover tooltip showing the exact value. ──
+const CHART_COLORS = {
+  dispatched:'24,95,165', returned:'31,122,59', returned_damaged:'163,45,45',
+  new_stock:'124,58,237', new_stock_damaged:'185,28,124',
+};
+let _chartPoints = [];
+function drawChart(){
+  const c=document.getElementById('chart'); if(!c||!DATA) return;
+  const type = document.getElementById('chartType') ? document.getElementById('chartType').value : 'dispatched';
+  const label = TYPE_LABEL[type] || type;
+  const color = CHART_COLORS[type] || '24,95,165';
+  const by={};
+  active().filter(e=>e.type===type && (!HISTFROM||e.date>=HISTFROM) && (!HISTTO||e.date<=HISTTO))
+    .forEach(e=>{ by[e.date]=(by[e.date]||0)+e.qty; });
+  const days=Object.keys(by).sort(), vals=days.map(d=>by[d]);
+  const dpr=window.devicePixelRatio||1, W=c.clientWidth, H=220;
+  c.width=W*dpr; c.height=H*dpr;
+  const x=c.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,W,H);
+  _chartPoints = [];
+  if(!days.length){ x.fillStyle='#bbb'; x.font='13px sans-serif'; x.textAlign='center';
+    x.fillText(`No ${label.toLowerCase()} entries in this period`,W/2,H/2); return; }
+  const P={t:14,r:12,b:26,l:44}, cw=W-P.l-P.r, ch=H-P.t-P.b, max=Math.max(...vals,1);
+  x.strokeStyle='#eee'; x.fillStyle='#999'; x.font='10px sans-serif'; x.textAlign='right';
+  for(let i=0;i<=4;i++){ const y=P.t+ch-(ch*i/4);
+    x.beginPath();x.moveTo(P.l,y);x.lineTo(W-P.r,y);x.stroke();
+    x.fillText(Math.round(max*i/4),P.l-6,y+3); }
+  const px=i=>P.l+(days.length===1?cw/2:cw*i/(days.length-1)), py=v=>P.t+ch-(ch*v/max);
+  x.beginPath(); days.forEach((d,i)=>i?x.lineTo(px(i),py(vals[i])):x.moveTo(px(i),py(vals[i])));
+  x.strokeStyle=`rgb(${color})`; x.lineWidth=2; x.stroke();
+  x.lineTo(px(days.length-1),P.t+ch); x.lineTo(px(0),P.t+ch); x.closePath();
+  x.fillStyle=`rgba(${color},.10)`; x.fill();
+  x.fillStyle=`rgb(${color})`; days.forEach((d,i)=>{x.beginPath();x.arc(px(i),py(vals[i]),2.5,0,7);x.fill();});
+  x.fillStyle='#999'; x.textAlign='center';
+  const step=Math.max(1,Math.ceil(days.length/8));
+  days.forEach((d,i)=>{ if(i%step===0||i===days.length-1) x.fillText(d.slice(8)+'/'+d.slice(5,7),px(i),H-8); });
+  days.forEach((d,i)=>{ _chartPoints.push({x:px(i), y:py(vals[i]), date:d, value:vals[i]}); });
+}
+(function initChartHover(){
+  const c = document.getElementById('chart');
+  const tip = document.getElementById('chartTip');
+  if(!c || !tip) return;
+  c.addEventListener('mousemove', e=>{
+    if(!_chartPoints.length) return;
+    const rect = c.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    let nearest = _chartPoints[0], best = Infinity;
+    for(const p of _chartPoints){ const d = Math.abs(p.x - mx); if(d<best){ best=d; nearest=p; } }
+    tip.style.display = 'block';
+    tip.style.left = Math.min(rect.width - 90, Math.max(0, nearest.x - 30)) + 'px';
+    tip.style.top = Math.max(0, nearest.y - 32) + 'px';
+    tip.textContent = `${nearest.date}: ${nearest.value.toLocaleString()}`;
+  });
+  c.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
+})();
+window.addEventListener('resize',()=>{ if(DATA) drawChart(); });
+
 function render(){
   const {stock,damaged} = computeStock();
   const top = topSeller();
@@ -327,6 +400,7 @@ function render(){
         <td class="num" style="color:${dm?'#A32D2D':'#ccc'}">${dm||'—'}</td></tr>`;
     }).join('');
   renderHistory();
+  drawChart();
 }
 
 // ── Grouped-by-day history, date-range filterable, shows ALL vendor
@@ -341,6 +415,7 @@ function setHistRange(k,el){
   else {HISTFROM=document.getElementById('hf').value||null;HISTTO=document.getElementById('ht').value||null;}
   if(el){document.querySelectorAll('#app .dp').forEach(b=>b.classList.remove('on'));el.classList.add('on');}
   renderHistory();
+  drawChart();
 }
 // Default view: last 7 days, so the page stays short — older entries are
 // one tap away via the date buttons above, not scrolled past.

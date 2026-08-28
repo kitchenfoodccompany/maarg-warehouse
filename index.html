@@ -265,6 +265,8 @@ function addToBatch(){
   if(!product) return msg.innerHTML = err('Choose a product.');
   if(!(qty>0)) return msg.innerHTML = err('Enter a quantity.');
   if((TYPE==='returned'||TYPE==='returned_damaged') && !orderRef) return msg.innerHTML = err('Order reference is required for returns.');
+  const refCheck = checkOrderRefCount(TYPE, orderRef, qty);
+  if(refCheck) return msg.innerHTML = err(refCheck);
 
   // New Stock with a damaged sub-count splits into two linked entries — the
   // sellable portion (qty - damaged) as new_stock, and the damaged portion
@@ -294,6 +296,18 @@ function addToBatch(){
   renderBatch();
 }
 function err(m){ return `<span style="color:#A32D2D">${m}</span>`; }
+
+// Order reference must have one entry PER unit for returns — e.g. Quantity
+// 5 needs exactly 5 comma-separated refs. Prevents silently mismatched data
+// where, say, 5 damaged items are logged but only 4 orders get traced back
+// to Shopify for cancellation/restock.
+function checkOrderRefCount(type, orderRef, qty){
+  if(type!=='returned' && type!=='returned_damaged') return null;
+  const refs = String(orderRef||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(refs.length !== qty)
+    return `Quantity is ${qty} but you entered ${refs.length} order reference${refs.length!==1?'s':''}. Enter exactly one order reference per item, separated by commas.`;
+  return null;
+}
 
 function removeFromBatch(i){ BATCH.splice(i,1); renderBatch(); }
 
@@ -556,6 +570,8 @@ async function saveHistEdit(rowId, id, date, type, product){
   const msg = document.getElementById('hemsg_'+rowId);
   if(!(qty>0)) return msg.innerHTML = err('Enter a valid quantity.');
   if((type==='returned'||type==='returned_damaged') && !orderRef) return msg.innerHTML = err('Order reference is required for returns.');
+  const refCheck = checkOrderRefCount(type, orderRef, qty);
+  if(refCheck) return msg.innerHTML = err(refCheck);
   if(!by) return msg.innerHTML = err('Enter your name.');
   try{
     const r = await api({action:'edit', id, by, date, type, product, qty, orderRef, note});

@@ -46,7 +46,7 @@
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:600;color:#fff;white-space:nowrap}
   .p-dispatched{background:#185FA5}.p-returned{background:#1F7A3B}
   .p-returned_damaged{background:#A32D2D}.p-new_stock{background:#7C3AED}.p-new_stock_damaged{background:#B91C7C}.p-adjustment{background:#B45309}
-  .low{color:#A32D2D;font-weight:700}
+  .low{color:#DB2777;font-weight:700}
   .muted{color:#999;font-size:12px}
   .scroll{overflow-x:auto}
   canvas{display:block;width:100%}
@@ -187,7 +187,7 @@
 </div>
 
 <script>
-const APP_PASSWORD = 'Upaya26!';   // ← CHANGE before sharing with the partner
+const APP_PASSWORD = 'MaargStock2026!';   // ← CHANGE before sharing with the partner
 const SECRET = 'Labila49!';               // must match API_SECRET in Vercel
 const PROXY  = 'https://shopify-order-proxy.vercel.app';
 const AUTH   = 'maarg_inv_partner_auth';
@@ -233,7 +233,7 @@ async function load(){
   try{
     DATA = await api(null);
     const sel = document.getElementById('product');
-    sel.innerHTML = '<option value="">Select product…</option>' + DATA.products.map(p=>`<option>${p}</option>`).join('');
+    sel.innerHTML = '<option value="">Select product…</option>' + DATA.products.map(p=>`<option value="${p}">${isBestSeller(p)?'⭐ ':''}${p}</option>`).join('');
     render();
   }catch(e){ document.getElementById('addmsg').innerHTML = `<span style="color:#A32D2D">Could not load: ${e.message}</span>`; }
 }
@@ -372,13 +372,9 @@ function renderKPIs(){
   document.getElementById('k-a').textContent=(t.adjustment>=0?'+':'')+t.adjustment.toLocaleString();
 }
 
-function topSeller(){
-  const totals = {};
-  active().filter(e=>e.type==='dispatched').forEach(e=>{ totals[e.product]=(totals[e.product]||0)+e.qty; });
-  let best=null, max=0;
-  for(const [p,q] of Object.entries(totals)) if(q>max){ max=q; best=p; }
-  return best;
-}
+// Curated by hand, not computed — Styler Pro and Heat Protectant specifically.
+const BEST_SELLERS = ['HAIR STYLER', 'HAIR SPRAY'];
+function isBestSeller(product){ return BEST_SELLERS.includes(product); }
 
 // ── Trend chart — same time window as Recent Entries (HISTFROM/HISTTO),
 // selectable by entry type, with a hover tooltip showing the exact value. ──
@@ -439,12 +435,11 @@ window.addEventListener('resize',()=>{ if(DATA) drawChart(); });
 
 function render(){
   const {stock,damaged} = computeStock();
-  const top = topSeller();
   document.getElementById('stock').innerHTML =
     `<tr><th>Product</th><th class="num">In warehouse</th><th class="num">Damaged</th></tr>` +
     DATA.products.map(p=>{
       const st=stock[p]||0, dm=damaged[p]||0;
-      return `<tr><td>${p}${p===top?' <span class="topseller">🔥 Top seller</span>':''}</td>
+      return `<tr><td>${p}${isBestSeller(p)?' <span class="topseller">⭐ Best Seller</span>':''}</td>
         <td class="num ${st<=LOW_STOCK?'low':''}">${st.toLocaleString()}</td>
         <td class="num" style="color:${dm?'#A32D2D':'#ccc'}">${dm||'—'}</td></tr>`;
     }).join('');

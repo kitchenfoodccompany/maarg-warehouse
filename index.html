@@ -192,7 +192,7 @@ const SECRET = 'Labila49!';               // must match API_SECRET in Vercel
 const PROXY  = 'https://shopify-order-proxy.vercel.app';
 const AUTH   = 'maarg_inv_partner_auth';
 const LOW_STOCK = 10;
-const TYPE_LABEL = {dispatched:'Dispatched',returned:'Returned',returned_damaged:'Damaged',new_stock:'New Stock',new_stock_damaged:'New Stock (Damaged)',adjustment:'Adjustment'};
+const TYPE_LABEL = {dispatched:'Dispatched',returned:'Returned',returned_damaged:'Damaged',new_stock:'New Stock',new_stock_damaged:'New Stock (Damaged)',adjustment:'Adjustment',adjustment_damaged:'Damage Adjustment'};
 
 let DATA=null, TYPE=null, BATCH=[];
 
@@ -496,10 +496,16 @@ function renderHistory(){
     const items = byDay[d];
     const counts = {};
     items.forEach(e=>counts[e.type]=(counts[e.type]||0)+e.qty);
-    const summary = Object.entries(counts).map(([t,q])=>`${TYPE_LABEL[t]} ${q}`).join(' · ');
+    const isOpeningDay = DATA.openingDate && d === DATA.openingDate;
+    const summary = isOpeningDay
+      ? `<strong>📦 Starting inventory</strong>`
+      : Object.entries(counts).map(([t,q])=>`${TYPE_LABEL[t]||t} ${q}`).join(' · ');
+    const dateLabel = isOpeningDay
+      ? `Starting inventory on ${new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}`
+      : d;
     return `<div class="dayhead" onclick="toggleDay(${idx})">
-        <span class="l">${d}</span>
-        <span class="r">${items.length} item${items.length>1?'s':''} · ${summary} <span id="arw${idx}">▸</span></span>
+        <span class="l">${dateLabel}</span>
+        <span class="r">${isOpeningDay ? '' : items.length+' item'+(items.length>1?'s':'')+' · '}${summary} <span id="arw${idx}">▸</span></span>
       </div>
       <div class="dcontent" id="dc${idx}">
         ${items.map((e,j)=>{

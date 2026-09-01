@@ -493,10 +493,22 @@ function renderHistory(){
   const days = Object.keys(byDay).sort().reverse();
 
   document.getElementById('hist').innerHTML = days.length ? days.map((d,idx)=>{
-    const items = byDay[d];
+    let items = byDay[d];
+    const isOpeningDay = DATA.openingDate && d === DATA.openingDate;
+    // Opening SELLABLE counts live in DATA.opening as a static snapshot, not
+    // as events — only the opening DAMAGED counts were ever stored as real
+    // events. These synthetic rows are display-only, rebuilt on every
+    // render, never sent to the server or touching stock calculations —
+    // purely so "Starting inventory" shows the full picture.
+    if(isOpeningDay){
+      const attributedTo = (items.find(e=>e.status==='active')||{}).by || 'Opening balance';
+      const synthetic = DATA.products
+        .filter(p => (DATA.opening[p]||0) > 0)
+        .map(p => ({ type:'new_stock', product:p, qty:DATA.opening[p], by:attributedTo, status:'active', orderRef:null, note:'Starting inventory', synthetic:true }));
+      items = synthetic.concat(items);
+    }
     const counts = {};
     items.forEach(e=>counts[e.type]=(counts[e.type]||0)+e.qty);
-    const isOpeningDay = DATA.openingDate && d === DATA.openingDate;
     const summary = isOpeningDay
       ? `<strong>📦 Starting inventory</strong>`
       : Object.entries(counts).map(([t,q])=>`${TYPE_LABEL[t]||t} ${q}`).join(' · ');
@@ -516,10 +528,10 @@ function renderHistory(){
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
               <span><span class="pill p-${e.type}">${TYPE_LABEL[e.type]}</span> ${e.qty} × ${e.product}${e.orderRef?' · #'+e.orderRef:''}${e.note?' · '+e.note:''}
                 <span class="muted">— ${e.by}</span></span>
-              <span style="white-space:nowrap;flex-shrink:0">
+              ${e.synthetic ? '' : `<span style="white-space:nowrap;flex-shrink:0">
                 <button class="btn2" onclick="toggleHistEdit('${rowId}')">Edit</button>
                 <button class="btn2" style="color:#A32D2D" onclick="toggleHistVoid('${rowId}')">Delete</button>
-              </span>
+              </span>`}
             </div>
             <div id="hedit_${rowId}" style="display:none;margin-top:8px;padding:10px;background:#f5f5f5;border-radius:8px">
               <div class="f" style="margin-bottom:8px"><label>Quantity</label><input type="number" id="hqty_${rowId}" value="${e.qty}"></div>
